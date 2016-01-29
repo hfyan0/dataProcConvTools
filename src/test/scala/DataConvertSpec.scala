@@ -19,6 +19,8 @@ class DataConvertTest extends AssertionsForJUnit {
     val r = new scala.util.Random(2357)
     val ohlc2 = new DataConvert.OHLCAcc()
     assertFalse(ohlc2.ready)
+
+    var lastc = -1D
     for (j <- 0 to 10000) {
       val s = scala.collection.mutable.Set[Double]()
       var o = -1D
@@ -28,13 +30,20 @@ class DataConvertTest extends AssertionsForJUnit {
       for (i <- 0 to 50) {
         val rand_price = r.nextInt(1000).toDouble
         val rand_volume = r.nextInt(1000).toLong
-        if (o < 0) o = rand_price
+        if (o < 0) {
+          if (lastc < 0) o = rand_price
+          else {
+            o = lastc
+            s += lastc
+          }
+        }
         c = rand_price
         ohlc2.updateOHLC(rand_price, rand_volume)
         s += rand_price
         v += rand_volume
       }
-      assertEquals(ohlc2.getOHLCBar, new DataConvert.OHLCBar(o, s.max, s.min, c, v))
+      lastc = c
+      assertEquals(ohlc2.getOHLCPriceBar, new DataConvert.OHLCPriceBar(o, s.max, s.min, c, v))
     }
 
   }
