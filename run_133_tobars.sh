@@ -16,7 +16,7 @@ while IFS='' read -r line || [[ -n "$line" ]]; do
     echo "file: $line"
     DATESTR=$(echo $line | sed -e 's/^.*_20/20/')
     stouch ./$OUTPUTFOLDER1/$line
-    $BIN "$line" "$OUTPUTFOLDER1/$line" hkex1_ohlcbar1 $BARINTERVALINSEC $DATESTR 090000 160000
+    $BIN "$line" "$OUTPUTFOLDER1/$line" hkex1_cashohlcfeed $BARINTERVALINSEC $DATESTR 090000 160000
 done < file_list
 
 

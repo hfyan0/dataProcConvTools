@@ -4,7 +4,7 @@ import AssemblyKeys._
 name := "DataProcConvTools"
 
 // orgnization name (e.g., the package name of the project)
-organization := "com.treasure-data"
+organization := "org.nirvana.dataprocconv"
 
 version := "1.0-SNAPSHOT"
 

@@ -2,7 +2,7 @@
 
 BIN="java -jar DataProcConvTools-assembly-1.0-SNAPSHOT.jar"
 
-INPUTFOLDER1=output3_h1bar
+INPUTFOLDER1=output3_bars_300
 OUTPUTFOLDER1=output_mdi
 
 ##################################################
