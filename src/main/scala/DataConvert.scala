@@ -60,14 +60,20 @@ object DataConvert {
       val outputAdaptor = new DataFmtAdaptors.OHLCOutputAdaptor(startTime, endTime, barIntervalInSec)
 
       for (line <- scala.io.Source.fromFile(inputFile).getLines()) {
-        outputAdaptor.convertToOHLCOutput(DataFmtAdaptors.parseHKExFmt1(line)).foreach {
-          s =>
-            {
-              pw.write(s);
-              pw.write("\n");
-              pw.flush
+        DataFmtAdaptors.parseHKExFmt1(line) match {
+          case Some(tt) => {
+            outputAdaptor.convertToOHLCOutput(tt).foreach {
+              s =>
+                {
+                  pw.write(s);
+                  pw.write("\n");
+                  pw.flush
+                }
             }
+          }
+          case _ => Unit
         }
+
       }
 
       //--------------------------------------------------
@@ -77,9 +83,15 @@ object DataConvert {
     }
     else if (conversionFmt == "hkex1_cashmdi") {
       for (line <- scala.io.Source.fromFile(inputFile).getLines()) {
-        pw.write(DataFmtAdaptors.convertToCashMDI(DataFmtAdaptors.parseHKExFmt1(line)))
-        pw.write("\n")
-        pw.flush
+
+        DataFmtAdaptors.parseHKExFmt1(line) match {
+          case Some(tt) => {
+            pw.write(DataFmtAdaptors.convertToCashMDI(tt))
+            pw.write("\n")
+            pw.flush
+          }
+          case _ => Unit
+        }
 
       }
     }
