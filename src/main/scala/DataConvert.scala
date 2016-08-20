@@ -1,6 +1,8 @@
 import org.nirvana._
 import java.io._
 import org.joda.time.{Period, DateTime, Duration}
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 object DataConvert {
 
@@ -30,7 +32,11 @@ object DataConvert {
     println("         hkex1_cashohlcfeed")
     println("         hkex1_cashmdi")
     println("         cashohlcfeed_cashmdi")
+    println("         cashmdi_bbottickbinary")
+    println("         bbottickbinary_cashmdi")
   }
+
+  val numofdecimalplaces: Short = 0
 
   //--------------------------------------------------
   def main(args: Array[String]) = {
@@ -47,9 +53,9 @@ object DataConvert {
     val conversionFmt = args(2)
     //--------------------------------------------------
 
-    val pw = new java.io.PrintWriter(new File(outputFile))
-
     if (conversionFmt == "hkex1_cashohlcfeed") {
+      val pw = new java.io.PrintWriter(new File(outputFile))
+
       val barIntervalInSec = args(3).toInt
       val tradeDate = args(4).toInt
       val startHHMMSS = args(5).toInt
@@ -80,8 +86,11 @@ object DataConvert {
       // deliberately stuff a fake record at the end to flush out the last piece of data in memory
       //--------------------------------------------------
       outputAdaptor.convertToOHLCOutput(new org.nirvana.TradeTick(startTime, "DUMMY", 0, 0)).foreach { s => { pw.write(s); pw.write("\n"); pw.flush } }
+      pw.close()
     }
     else if (conversionFmt == "hkex1_cashmdi") {
+      val pw = new java.io.PrintWriter(new File(outputFile))
+
       for (line <- scala.io.Source.fromFile(inputFile).getLines()) {
 
         DataFmtAdaptors.parseHKExFmt1(line) match {
@@ -94,17 +103,129 @@ object DataConvert {
         }
 
       }
+      pw.close()
     }
     else if (conversionFmt == "cashohlcfeed_cashmdi") {
+      val pw = new java.io.PrintWriter(new File(outputFile))
+
       for (line <- scala.io.Source.fromFile(inputFile).getLines()) {
         pw.write(DataFmtAdaptors.convertFromOHLCBarToCashMDI(DataFmtAdaptors.parseCashOHLCFmt1(line, false).get))
         pw.write("\n")
         pw.flush
 
       }
+      pw.close()
     }
+    else if (conversionFmt == "cashmdi_bbottickbinary") {
+      val bos = new BufferedOutputStream(new FileOutputStream(new File(outputFile)))
+      val pw = new java.io.PrintWriter(new File(outputFile + ".meta"))
 
-    pw.close()
+      //--------------------------------------------------
+      // meta data
+      //--------------------------------------------------
+      var m2 = Map[String, Short]()
+      var timebase: Long = 0
+      //--------------------------------------------------
+      var symNum = 0
+
+      val bbTmp: ByteBuffer = ByteBuffer.allocate(BBOTTick.recSizeBBOT)
+      bbTmp.order(ByteOrder.LITTLE_ENDIAN)
+
+      val bbTimeBase: ByteBuffer = ByteBuffer.allocate(8)
+      bbTimeBase.order(ByteOrder.LITTLE_ENDIAN)
+
+      for (line <- scala.io.Source.fromFile(inputFile).getLines()) {
+
+        DataFmtAdaptors.parseCashMDI(line) match {
+          case Some(mdis) => {
+            // println(mdis.toString)
+
+            if (timebase <= 0) timebase = mdis.dt.getMillis
+
+            if (!m2.contains(mdis.symbol)) {
+              m2 += mdis.symbol -> symNum.toShort
+              symNum += 1
+            }
+            val bbotTickItrd = mdis.getBBOTTick(timebase, m2)
+            bbTmp.clear
+
+            bbTmp.putShort(bbotTickItrd.numofdecimalplaces)
+            bbTmp.putInt(bbotTickItrd.mssincebase)
+            bbTmp.putShort(bbotTickItrd.symNum)
+            bbTmp.putInt(bbotTickItrd.pricebase)
+            bbTmp.putShort(bbotTickItrd.tradeprice)
+            bbTmp.putInt(bbotTickItrd.tradevolume)
+            bbTmp.putShort(bbotTickItrd.bbidp)
+            bbTmp.putInt(bbotTickItrd.bbidv)
+            bbTmp.putShort(bbotTickItrd.baskp)
+            bbTmp.putInt(bbotTickItrd.baskv)
+
+            bos.write(bbTmp.array)
+
+          }
+          case None => Unit
+        }
+
+      }
+
+      //--------------------------------------------------
+      // write meta data
+      //--------------------------------------------------
+      pw.write(timebase.toString)
+      pw.write("\n")
+      for ((symStr, symNum) <- m2) {
+        pw.write(symNum.toString)
+        pw.write(",")
+        pw.write(symStr)
+        pw.write("\n")
+      }
+
+      bos.close()
+      pw.close()
+    }
+    else if (conversionFmt == "bbottickbinary_cashmdi") {
+      val pw = new java.io.PrintWriter(new File(outputFile))
+
+      //--------------------------------------------------
+      // meta data
+      //--------------------------------------------------
+      val lsmeta = scala.io.Source.fromFile(inputFile + ".meta").getLines.toList
+      val timebase: Long = lsmeta.head.toLong
+      var m1 = Map[Short, String]()
+      lsmeta.tail.foreach(x => {
+        val keyval = x.split(",").toList
+        m1 += keyval(0).toShort -> keyval(1)
+      })
+
+      //--------------------------------------------------
+      var symNum = 0
+
+      val fis = new FileInputStream(new File(inputFile))
+
+      var bufTmp = new Array[Byte](BBOTTick.recSizeBBOT)
+      val bbTmp: ByteBuffer = ByteBuffer.allocate(BBOTTick.recSizeBBOT)
+      bbTmp.order(ByteOrder.LITTLE_ENDIAN)
+      while (fis.read(bufTmp, 0, BBOTTick.recSizeBBOT) != -1) {
+        bbTmp.clear
+        bbTmp.put(bufTmp, 0, BBOTTick.recSizeBBOT)
+        bbTmp.flip
+        val numofdecimalplaces = bbTmp.getShort
+        val mssincebase = bbTmp.getInt
+        val symNum = bbTmp.getShort
+        val pricebase = bbTmp.getInt
+        val tradeprice = bbTmp.getShort
+        val tradevolume = bbTmp.getInt
+        val bbidp = bbTmp.getShort
+        val bbidv = bbTmp.getInt
+        val baskp = bbTmp.getShort
+        val baskv = bbTmp.getInt
+        val bbotTickItrd = BBOTTick(numofdecimalplaces, mssincebase, symNum, pricebase, tradeprice, tradevolume, bbidp, bbidv, baskp, baskv)
+        pw.write(bbotTickItrd.getMDIStruct(timebase, m1).toString)
+        pw.write("\n")
+      }
+
+      pw.close()
+    }
 
     println("DataConvert ended")
   }
